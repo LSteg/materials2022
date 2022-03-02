@@ -1,0 +1,23 @@
+---
+title: "Assignment week 1"
+author: "Leonard C. Steg"
+date: "3/2/2022"
+output: html_document
+---
+
+Load epiwraps library
+
+```{r}
+
+library(epiwraps) 
+
+```
+Print session information
+
+```{r}
+
+sessionInfo()
+
+```
+
+
