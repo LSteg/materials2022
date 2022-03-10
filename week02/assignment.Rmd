@@ -1,0 +1,83 @@
+---
+title: "Assignment Week 2"
+author: "Leonard C. Steg"
+date: "3/8/2022"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(ensembldb)
+  library(GenomicRanges)
+  library(epiwraps)
+  library(ggplot2)
+  library(cowplot)
+})
+```
+
+
+
+```{r}
+ah <- AnnotationHub()
+```
+
+
+```{r, eval=FALSE}
+# Browse Annotation hub interactively
+display(ah)
+```
+
+
+```{r}
+ensdb_mouse <- ah[["AH89211"]]
+genome_mouse <- ah[["AH49775"]]
+genome_dros <- ah[["AH49674"]]
+```
+
+```{r}
+gnx <- genes(ensdb_mouse)
+
+prot_coding <- gnx[gnx$gene_biotype == "protein_coding"]
+
+length(unique(prot_coding$gene_id))
+
+length(unique(prot_coding$gene_name))
+
+```
+```{r}
+
+ExonNr <- as.data.frame(lengths(ranges(exonsBy(ensdb_mouse, by = "gene", filter = GeneBiotypeFilter("protein_coding")))))
+
+colnames(ExonNr) <- "V1"
+
+
+ggplot(data = ExonNr, aes(x = V1)) +
+  geom_histogram() +
+  theme_cowplot() +
+  xlab("Exons per protein coding genes")
+
+
+```
+
+
+
+
+
+
+```{r}
+ExonLengths <- as.data.frame(sum(width(exonsBy(ensdb_mouse, by = "gene", filter = GeneBiotypeFilter("protein_coding") ))))
+
+colnames(ExonLengths) <- "V1"
+
+ggplot(data = ExonLengths, aes(x = V1)) +
+  geom_histogram() +
+  theme_cowplot() +
+  xlab("Lengths of spliced protein coding exons")
+
+```
+
+```{r}
+sessionInfo()
+```
+
