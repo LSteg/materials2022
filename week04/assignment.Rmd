@@ -75,6 +75,10 @@ mkdir -p aligned
 samtools index aligned/mESC.p300.bam
 ```
 
+```{r}
+read.delim("aligned/mESC.p300.bowtie2")
+```
+
 
 # Peak calling
 
@@ -98,7 +102,7 @@ length(peaks)
 
 
 # Generating coverage tracks
-```{r, eval=F, echo=T}
+```{r, eval=F}
 dir.create("tracks")
 if (!dir.exists("tracks")){
 dir.create("tracks")

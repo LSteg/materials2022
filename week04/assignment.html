@@ -434,6 +434,13 @@ export(import.2bit(genome), &quot;mm_genome/genome.fasta.gz&quot;, compress=TRUE
 (bowtie2 -p 4 -x mm_genome/bowtie2 -U rfastp.trimmed/mESC.p300_R1.fastq.gz) 2&gt; aligned/mESC.p300.bowtie2 |\
   samtools view -bS - | samtools sort -@4 -m 2G - &gt; aligned/mESC.p300.bam
 samtools index aligned/mESC.p300.bam</code></pre>
+<pre class="r"><code>read.delim(&quot;aligned/mESC.p300.bowtie2&quot;)</code></pre>
+<pre><code>##                      X17184393.reads..of.these.
+## 1   17184393 (100.00%) were unpaired; of these:
+## 2              3802198 (22.13%) aligned 0 times
+## 3       9822428 (57.16%) aligned exactly 1 time
+## 4             3559767 (20.72%) aligned &gt;1 times
+## 5                 77.87% overall alignment rate</code></pre>
 </div>
 </div>
 <div id="peak-calling" class="section level1">
