@@ -1,0 +1,194 @@
+---
+title: "Assignment Weeks 3 and 4"
+author: "Leonard C. Steg"
+date: "3/16/2022"
+output: html_document
+---
+
+# Preparation
+
+### Load libraries, set wd and load AnnotationHub
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+})
+
+setwd("/mnt/groupMansuy/leo/epibioinfo/week03/")
+ah <- AnnotationHub()
+```
+
+### Downloading  raw reads
+```{r, eval=FALSE}
+
+if (!dir.exists("raw")){
+dir.create("raw")
+} 
+
+download.file("https://www.encodeproject.org/files/ENCFF001LJN/@@download/ENCFF001LJN.fastq.gz", dest="raw/mESCs.p300.fastq.gz")
+```
+
+# QC and trimming
+
+## Using Rfastp
+
+```{r, message=FALSE}
+dir.create("rfastp.trimmed")
+if (!dir.exists("rfastp.trimmed")){
+dir.create("rfastp.trimmed")
+} 
+qc <- Rfastp::rfastp("raw/mESCs.p300.fastq.gz", outputFastq="rfastp.trimmed/mESC.p300", 
+                     maxNfilter=0, thread=4, overrepresentationAnalysis=TRUE)
+```
+### Plot Curve plots before and after QC
+```{r}
+Rfastp::curvePlot(qc, curve="content_curves")
+```
+
+
+# Alignment
+```{r, eval=F, echo=T}
+# Load the mouse genome sequence
+genome <- ah[["AH49775"]]
+
+# Export the genome sequence in fasta format
+if (!dir.exists("mm_genome")){
+dir.create("mm_genome")
+} 
+export(import.2bit(genome), "mm_genome/genome.fasta.gz", compress=TRUE)
+```
+
+### Building the index using Bowtie2
+```{bash engine.opts='-l', eval=F, echo=T}
+bowtie2-build --threads 4 /mnt/groupMansuy/week03/mm_genome/genome.fasta.gz /mnt/groupMansuy/week03/mm_genome/bowtie2
+```
+
+### Alignment using samtools
+```{bash engine.opts='-l', eval=F, echo=T}
+mkdir -p aligned
+(bowtie2 -p 4 -x mm_genome/bowtie2 -U rfastp.trimmed/mESC.p300_R1.fastq.gz) 2> aligned/mESC.p300.bowtie2 |\
+  samtools view -bS - | samtools sort -@4 -m 2G - > aligned/mESC.p300.bam
+samtools index aligned/mESC.p300.bam
+```
+
+```{r}
+read.delim("aligned/mESC.p300.bowtie2")
+```
+
+
+# Peak calling
+
+### Using MACS2
+
+```{bash engine.opts='-l', eval=F, echo=T}
+mkdir -p peaks
+macs2 callpeak --outdir peaks -n mESC.p300 --gsize mm -t aligned/mESC.p300.bam
+```
+
+### Importing peaks into R
+
+```{r}
+peaks <- rtracklayer::import("peaks/mESC.p300_peaks.narrowPeak", format = "narrowPeak")
+```
+
+### Assignment question: How many peaks do we find?
+```{r}
+length(peaks)
+```
+
+
+# Generating coverage tracks
+```{r, eval=F}
+dir.create("tracks")
+if (!dir.exists("tracks")){
+dir.create("tracks")
+} 
+bam2bw("aligned/mESC.p300.bam", "tracks/mESC.p300.bw", binWidth=10, extend=50, scaling=TRUE)
+```
+# Load Mouse EnsDb to have gene annoation
+
+```{r}
+ensdb <- ah[["AH89211"]] # Mouse EnsDb
+
+```
+
+
+# Looking at the p300 peak(s) around the Sox9 gene
+```{r}
+plotSignalTracks(list(signal="tracks/mESC.p300.bw", peaks=peaks), region="Sox9", ensdb=ensdb, colors = "#017788", transcripts = "collapsed")
+```
+
+
+
+### Add gene annotaiton to peak data and describe annotation of identified genes
+```{r}
+peakAnno <- annotateRegions(peaks, ensdb)
+table(peakAnno$class)
+```
+
+
+### Plot heatmap with top 1000 most significant peaks in the p300 dataset
+```{r}
+topPeaks <- peaks[peaks$pValue  > sort(peaks$pValue, decreasing = T)[1000]]
+length(topPeaks)
+
+peakSignals <- signal2Matrix("tracks/mESC.p300.bw", regions = topPeaks, extend = 2000, w = 20)
+
+plotEnrichedHeatmaps(peakSignals)
+```
+
+# Compare p300 peaks with Histone modification peaks (from public datasets)
+### Download peak data from H3K4me3, H3K4me1, H3K27ac, and H3K27me3 ChIP datasets (Mus musculus strain Bruce4 ES-Bruce4)
+```{r, eval=FALSE}
+download.file(url = "https://www.encodeproject.org/files/ENCFF671UNN/@@download/ENCFF671UNN.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K4me3.bed.gz")
+download.file(url = "https://www.encodeproject.org/files/ENCFF333IJH/@@download/ENCFF333IJH.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K4me1.bed.gz")
+download.file(url = "https://www.encodeproject.org/files/ENCFF274UIB/@@download/ENCFF274UIB.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K27ac.bed.gz")
+download.file(url = "https://www.encodeproject.org/files/ENCFF558YNC/@@download/ENCFF558YNC.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K27me3.bed.gz")
+```
+
+
+### Load in H3K4me3 data, adjust the seqlevels (to have the same chromosome names for both datasets) and print the proportion of the p300 peaks that overlap with H3K4me3
+```{r}
+h3k4me3 <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K4me3.bed.gz", format = "narrowPeak")
+h3k4me3 <- renameSeqlevels(x = h3k4me3, levels(gsub("chr", "", seqnames(h3k4me3))))
+
+p300h3k4me3 <- overlapsAny(peaks, h3k4me3)
+sum(p300h3k4me3)/length(p300h3k4me3)
+
+```
+
+### Load in H3K4me1 data, adjust the seqlevels and print the proportion of the p300 peaks that overlap with H3K4me1
+```{r}
+h3k4me1 <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K4me1.bed.gz", format = "narrowPeak")
+h3k4me1 <- renameSeqlevels(x = h3k4me1, levels(gsub("chr", "", seqnames(h3k4me1))))
+
+p300h3k4me1 <- overlapsAny(peaks, h3k4me1)
+sum(p300h3k4me1)/length(p300h3k4me1)
+
+```
+
+### Load in H3K27ac data, adjust the seqlevels and print the proportion of the p300 peaks that overlap with H3K27ac
+```{r}
+h3k27ac <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K27ac.bed.gz", format = "narrowPeak")
+h3k27ac <- renameSeqlevels(x = h3k27ac, levels(gsub("chr", "", seqnames(h3k27ac))))
+
+p300h3k27ac <- overlapsAny(peaks, h3k27ac)
+sum(p300h3k27ac)/length(p300h3k27ac)
+```
+
+### Load in H3K27me3 data, adjust the seqlevels and print the proportion of the p300 peaks that overlap with H3K27me3
+```{r}
+h3k27me3 <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K27me3.bed.gz", format = "narrowPeak")
+h3k27me3 <- renameSeqlevels(x = h3k27me3, levels(gsub("chr", "", seqnames(h3k27me3))))
+
+p300h3k27me3 <- overlapsAny(peaks, h3k27me3)
+sum(p300h3k27me3)/length(p300h3k27me3)
+```
+
+```{r}
+sessionInfo()
+```
