@@ -1,0 +1,111 @@
+---
+title: "Assignment Week 5"
+author: "Leonard C. Steg"
+date: '2022-03-29'
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+  library(MotifDb)
+  library(universalmotif)
+  library(TFBSTools)
+  library(memes)
+  library(PWMEnrich)
+})
+
+
+```
+
+## Load ESC peaks from former assigment
+```{r}
+h3k4me3.esc <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K4me3.bed.gz", format = "narrowPeak")
+h3k27me3.esc <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week04/EncodePeaks/H3K27me3.bed.gz", format = "narrowPeak")
+```
+
+## Part 1: Identfy bivalent H3K4me3 / H3K27me3 domains.
+```{r}
+bivalent.esc <- intersect(h3k4me3.esc, h3k27me3.esc)
+
+length(bivalent.esc)
+```
+## Downloading Embryonic Day 11.5 Neural Tube Peak Files
+```{r, eval = FALSE}
+dir.create("EncodePeaks")
+download.file(url = "https://www.encodeproject.org/files/ENCFF090NYW/@@download/ENCFF090NYW.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.h3k27me3.bed.gz")
+download.file(url = "https://www.encodeproject.org/files/ENCFF232UTI/@@download/ENCFF232UTI.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.h3k4me3.bed.gz")
+```
+
+```{r}
+h3k27me3.neuraltube <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.h3k27me3.bed.gz", format = "narrowPeak")
+h3k4me3.neuraltube <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.h3k4me3.bed.gz", format = "narrowPeak")
+
+bivalent.neuraltube <- intersect(h3k27me3.neuraltube, h3k4me3.neuraltube)
+
+length(bivalent.neuraltube)
+```
+
+```{r}
+
+regionUpset(list(bivalent_ESC= bivalent.esc, NeuralTube_H3K27me3=h3k27me3.neuraltube, NeuralTube_H3K4me3=h3k4me3.neuraltube), reference = bivalent.esc)
+
+```
+
+### It seems that in this early stage of development, the majority of bivalent peaks (3050) remain bivalent, with only 1729 of the original bivalent peaks now being activated (H3K4me3) and 573 being repressed (H3K27me3).
+
+## Out of curiosity: Comparison to later developmental stages (Embryonic Day 15.5)
+
+```{r, eval = FALSE}
+download.file(url = "https://www.encodeproject.org/files/ENCFF643SJJ/@@download/ENCFF643SJJ.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.15.5.h3k27me3.bed.gz")
+download.file(url = "https://www.encodeproject.org/files/ENCFF144GNM/@@download/ENCFF144GNM.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.15.5.h3k4me3.bed.gz")
+```
+
+```{r}
+h3k27me3.15.5.neuraltube <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.15.5.h3k27me3.bed.gz", format = "narrowPeak")
+h3k4me3.15.5.neuraltube <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/neuraltube.15.5.h3k4me3.bed.gz", format = "narrowPeak")
+
+bivalent.neuraltube.15.5 <- intersect(h3k27me3.15.5.neuraltube, h3k4me3.15.5.neuraltube)
+
+length(bivalent.neuraltube.15.5)
+```
+
+```{r}
+regionUpset(list(bivalent_ESC= bivalent.esc, NeuralTube_15.5_H3K27me3=h3k27me3.15.5.neuraltube, NeuralTube_15.5_H3K4me3=h3k4me3.15.5.neuraltube), reference = bivalent.esc)
+```
+
+### In this later stage of neural tube development, less of the original bivalent peaks remain bivalent, and a large porportion got activated. Interestingly, less bivalent peaks became repressed compared to the early timepoint. 
+
+# Next Comparison: With PND 0 Forebrain samples
+
+```{r, eval = FALSE}
+download.file(url = "https://www.encodeproject.org/files/ENCFF827BBC/@@download/ENCFF827BBC.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/forebrain.pnd0.h3k27me3.bed.gz")
+download.file(url = "https://www.encodeproject.org/files/ENCFF782WPT/@@download/ENCFF782WPT.bed.gz", dest="/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/forebrain.pnd0.h3k4me3.bed.gz")
+```
+
+```{r}
+h3k27me3.forebrain <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/forebrain.pnd0.h3k27me3.bed.gz", format = "narrowPeak")
+h3k4me3.forebrain <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week05/EncodePeaks/forebrain.pnd0.h3k4me3.bed.gz", format = "narrowPeak")
+
+bivalent.forebrain <- intersect(h3k27me3.forebrain, h3k4me3.forebrain)
+
+length(bivalent.forebrain)
+```
+
+```{r}
+regionUpset(list(bivalent_ESC= bivalent.esc, Forebrain_H3K27me3=h3k27me3.forebrain, Forebrain_H3K4me3=h3k4me3.forebrain), reference = bivalent.esc)
+```
+
+
+### More domains change from bivalent to either activated or repressed. However, still a minority of the originally bivalent peaks in repressed.
+
+
+```{r}
+sessionInfo()
+```
+
