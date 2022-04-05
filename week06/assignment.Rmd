@@ -1,0 +1,81 @@
+---
+title: "Assignment Week 6"
+author: "Leonard C. Steg"
+date: '2022-04-01'
+output: html_document
+---
+
+```{r, eval = F}
+BiocManager::install(c("MotifDb", "universalmotif", "TFBSTools", "memes", "PWMEnrich"))
+```
+
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+  library(MotifDb)
+  library(universalmotif)
+  library(TFBSTools)
+  library(memes)
+  library(PWMEnrich)
+})
+```
+### Download Nanog ChIP peaks
+
+```{r, eval=FALSE}
+dir.create("EncodePeaks")
+download.file("https://www.encodeproject.org/files/ENCFF097ISB/@@download/ENCFF097ISB.bed.gz", destfile = "/mnt/groupMansuy/leo/epibioinfo/week06/EncodePeaks/nanog.bed.gz")
+```
+
+### Load and prepare the peaks for the analysis
+```{r}
+peaks <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week06/EncodePeaks/nanog.bed.gz", format = "narrowPeak")
+seqlevelsStyle(peaks) <- "Ensembl"
+peak_centers <- resize(peaks, fix="center", width=100)
+```
+
+### Load genome and identify sequences of peaks
+```{r}
+ah <- AnnotationHub()
+genome <- ah[["AH49775"]]
+
+peak_seqs <- memes::get_sequence(peak_centers, genome)
+```
+
+```{r}
+motifs <- query(MotifDb, "Nanog")
+names(motifs)
+motif <- motifs[["Mmusculus-HOCOMOCOv10-NANOG_MOUSE.H10MO.A"]]
+view_motifs(motif)
+```
+
+
+## Scanning for motif in peaks and answering question 1
+```{r}
+moi <- memes::runFimo(peak_seqs,  convert_motifs(motif), meme_path = "/mnt/IM/conda/bin/")
+
+length(peaks)
+sum(overlapsAny(peaks, moi))
+sum(overlapsAny(peaks, moi))/length(peaks)
+```
+
+From all Nanog peaks (n = 16037), 4311 (26.88%) contain the chosen Nanog motif
+
+
+## Scanning for motif in whole genome and answering question 2
+### Loading in genome and running runFimo
+```{r}
+genome <- import(genome)
+moi_genome <- memes::runFimo(genome, convert_motifs(motif), meme_path = "/mnt/IM/conda/bin")
+
+length(moi_genome)
+sum(overlapsAny(moi_genome, peaks))
+sum(overlapsAny(moi_genome, peaks))/length(moi_genome)
+```
+
+From all motifs in the genome (n = 2811800), 10785 (0.38%) are bound by Nanog (have a peak)
