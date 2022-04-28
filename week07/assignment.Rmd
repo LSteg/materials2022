@@ -1,0 +1,113 @@
+---
+title: "Assignment Week 7"
+author: "Leonard C. Steg"
+date: '2022-04-08'
+output: html_document
+---
+
+```{r, eval = F}
+BiocManager::install("ETHZ-INS/epiwraps")
+BiocManager::install("ATACseqQC")
+```
+
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+  library(MotifDb)
+  library(universalmotif)
+  library(TFBSTools)
+  library(memes)
+  library(PWMEnrich)
+})
+```
+
+### Load in annotation hub
+```{r}
+ah <- AnnotationHub()
+```
+
+### Download files from INS page
+```{r, eval = F}
+download.file("https://ethz-ins.org/content/w7/atac.chr19.bam", "atac.chr19.bam")
+download.file("https://ethz-ins.org/content/w7/atac.chr19.bam.bai", "atac.chr19.bam.bai")
+```
+
+### Prepare data tracks
+```{r}
+bam <- "atac.chr19.bam"
+fragSizesDist(bam)
+
+bam2bw(bam, output_bw = "full_cuts.bw", paired=TRUE, binWidth=1L, type="ends", forceSeqlevelsStyle = "Ensembl")
+bam2bw(bam, output_bw = "NF_cuts.bw", paired=TRUE, binWidth=1L, minFragLength=30,
+       maxFragLength=115, type="ends", forceSeqlevelsStyle = "Ensembl")
+
+```
+### Download and prepare genome and call peaks on ATAC bam file
+```{r}
+genome <- ah[["AH68356"]]
+chr19 <- GRanges("19", IRanges(1L,seqlengths(genome)["19"]))
+chr19 <- setNames(getSeq(genome, chr19), "19")
+
+accessible_regions <- callPeaks("atac.chr19.bam")
+seqlevelsStyle(accessible_regions) <- "Ensembl"
+```
+
+### Find Nanog motif, find instances in genome and overlap them with accessible regions
+```{r}
+# get Nanog sites
+nanog.motif <- query(MotifDb, c("Nanog","Mus"))[[1]]
+nanog.instances <- runFimo(chr19, convert_motifs(nanog.motif), meme_path = "/mnt/IM/conda/bin/")
+
+
+nanog.accessible.motifs <- nanog.instances[overlapsAny(nanog.instances, accessible_regions)]
+nanog.accessible.motifs <- nanog.accessible.motifs[nanog.accessible.motifs$score>10]
+length(nanog.accessible.motifs)
+
+```
+### A motif score of 10 was used (not 15), since filtering by atac overlap and score of 15 would only leave 2 regions, so I decided to decrease the needed score to something in which both TFs would have >100 regions.
+
+
+## Plotting signal around the Nanog motif occurences
+
+```{r}
+tracks <- c("Full cuts"="full_cuts.bw","NF cuts"="NF_cuts.bw")
+sm.nanog <- signal2Matrix(tracks, nanog.accessible.motifs, w=5, extend=500)
+
+# plot the signals
+smb.nanog <- renormalizeBorders(sm.nanog, method = "linear")
+plotEnrichedHeatmaps(smb.nanog, trim=0.95)
+```
+
+
+### Find Sox2 motif, find instances in genome and overlap them with accessible regions
+```{r}
+sox2.motif <- query(MotifDb, c("Sox2","Mus"))[[1]]
+sox2.instances <- runFimo(chr19, convert_motifs(sox2.motif), meme_path = "/mnt/IM/conda/bin/")
+
+
+sox2.accessible.motifs <- sox2.instances[overlapsAny(sox2.instances, accessible_regions)]
+sox2.accessible.motifs <- sox2.accessible.motifs[sox2.accessible.motifs$score>10]
+length(sox2.accessible.motifs)
+```
+
+
+## Plotting signal around the Sox2 motif occurences
+
+```{r}
+sm.sox2 <- signal2Matrix(tracks, sox2.accessible.motifs, w=5, extend=500)
+
+# plot the signals
+smb.sox2 <- renormalizeBorders(sm.sox2, method = "linear")
+plotEnrichedHeatmaps(smb.sox2, trim=0.95)
+```
+
+```{r}
+sessionInfo()
+```
+
