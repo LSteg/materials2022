@@ -1,0 +1,171 @@
+---
+title: "Assignment week 11"
+author: "Leonard C. Steg"
+date: '2022-05-25'
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(AnnotationHub)
+  library(ensembldb)
+  library(InteractionSet)
+  library(epiwraps)
+})
+```
+
+
+```{r, eval = F}
+# p300 peaks in A549 cells:
+download.file("https://www.encodeproject.org/files/ENCFF598BZD/@@download/ENCFF598BZD.bed.gz", "/mnt/groupMansuy/leo/epibioinfo/week11/myc.narrowPeak.gz")
+# Hi-C long-range interactions in A549 cells:
+download.file("https://www.encodeproject.org/files/ENCFF803ZOW/@@download/ENCFF803ZOW.tsv", "/mnt/groupMansuy/leo/epibioinfo/week11/interactions.tsv")
+```
+```{r}
+hic <- read.delim("/mnt/groupMansuy/leo/epibioinfo/week11/interactions.tsv")
+anchor1 <- GRanges(hic$chr1, IRanges(hic$x1, hic$x2))
+anchor2 <- GRanges(hic$chr2, IRanges(hic$y1, hic$y2))
+gi <- GInteractions(anchor1, anchor2, observed=hic$observed)
+seqlevelsStyle(gi) <- "ensembl"
+```
+
+```{r}
+peaks <- rtracklayer::import("/mnt/groupMansuy/leo/epibioinfo/week11/myc.narrowPeak.gz")
+seqlevelsStyle(peaks) <- "ensembl"
+```
+
+```{r}
+ah <- AnnotationHub()
+ensdb <- ah[["AH95744"]] # human ensembl 104 annotation
+```
+
+Annotate peaks to nearest genes
+```{r, warning = FALSE}
+peaks.anno <- annotateRegions(peaks, ensdb)
+```
+
+
+Find peaks in 2.5k - 10 k bp range from tss
+```{r}
+peaks.close <- peaks.anno[peaks.anno$distance2nearestTSS<10000 & peaks.anno$distance2nearestTSS>2500]
+peaks.far <- peaks.anno[peaks.anno$distance2nearestTSS>10000]
+```
+
+
+
+
+```{r}
+gi2targets <- function(gi, proms){
+  stopifnot(is(gi, "GInteractions"))
+  if(is(proms, "GRanges")){
+    stopifnot(!is.null(proms$gene_name))
+    seqlevelsStyle(proms) <- "ensembl"
+    proms <- proms[proms$gene_name!=""]
+  }else if(is(proms, "EnsDb")){
+    # obtain the promoters
+    proms <- trim(suppressWarnings(promoters(
+      transcripts(ensdb, columns=c("gene_name")),
+      upstream=100,downstream=50)))
+    proms <- proms[proms$gene_name!=""]
+  }else{
+    stop("Unrecognized `proms` format")
+  }
+  seqlevelsStyle(gi) <- "ensembl"
+  # find overlaps between first anchor and promoters
+  o <- as.data.frame(findOverlaps(first(gi), proms))
+  o$gene <- proms$gene_name[o$subjectHits]
+  o <- o[!duplicated(o[,c(1,3)]),]
+  o1 <- splitAsList(o$gene, o$queryHits)
+  # find overlaps between second anchor and promoters
+  o <- as.data.frame(findOverlaps(second(gi), proms))
+  o$gene <- proms$gene_name[o$subjectHits]
+  o <- o[!duplicated(o[,c(1,3)]),]
+  o2 <- splitAsList(o$gene, o$queryHits)
+  # merge anchors with an overlap in the mate anchor
+  hic2 <- c( first(gi)[as.numeric(names(o2))], second(gi)[as.numeric(names(o1))] )
+  # add target gene
+  hic2$gene <- c(o2,o1)
+  sort(hic2)
+}
+```
+
+
+
+```{r}
+gi2 <- gi2targets(gi,ensdb)  # or gi2 <- gi2targets(gi,proms)
+```
+
+## Checking distal targets of peaks with a distance between 2.5 and 10 kb to the closest TSS and calculate the proportion of contacts
+
+```{r, warning=FALSE}
+# find overlaps
+o.close <- findOverlaps(peaks.close, gi2)
+# add target genes to the peaks
+mcols(peaks.close)[from(o.close),"target"] <- gi2[to(o.close)]$gene
+mcols(peaks.close)$target <- CharacterList(mcols(peaks.close)$target)
+# look at the output
+
+res.close <- c()
+
+for (i in 1:length(peaks.close)){
+  
+  if (is.na(as.vector(peaks.close$target[[i]]))){
+    res.close[i] <- 0
+  } else {
+    
+    if (peaks.close$nearestTSS.gene_name[i] %in% as.vector(peaks.close$target[[i]])){
+      res.close[i] <- 1
+    } else {
+      res.close[i] <- 2
+    }
+ } 
+}
+
+res.close <- res.close[res.close != 0]
+
+proportion_contacts_close <- length(res.close[res.close == 1])/length(res.close)
+proportion_contacts_close
+
+
+
+```
+### Checking distal targets of peaks with a distance > 10 kb to the closest TSS and calculate the proportion of contacts
+
+```{r, warning=FALSE}
+# find overlaps
+o.far <- findOverlaps(peaks.far, gi2)
+# add target genes to the peaks
+mcols(peaks.far)[from(o.far),"target"] <- gi2[to(o.far)]$gene
+mcols(peaks.far)$target <- CharacterList(mcols(peaks.far)$target)
+# look at the output
+
+
+
+res.far <- c()
+
+for (i in 1:length(peaks.far)){
+  
+  if (is.na(as.vector(peaks.far$target[[i]]))){
+    res.far[i] <- 0
+  } else {
+    
+    if (peaks.far$nearestTSS.gene_name[i] %in% as.vector(peaks.far$target[[i]])){
+      res.far[i] <- 1
+    } else {
+      res.far[i] <- 2
+    }
+ } 
+}
+
+res.far <- res.far[res.far != 0]
+
+proportion_contacts_far <- length(res.far[res.far == 1])/length(res.far)
+proportion_contacts_far
+
+```
+
+
+# Answer:
+
+## Of the genes that are between 2.5 and 10kb from the nearest TSS, 1.8 % form an interaction with that nearest gene. Of the genes that are more than 10kb away from the nearest TSS, 15.1 % form an interaction with that nearest gene."
